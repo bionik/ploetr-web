@@ -14,6 +14,8 @@
       <span id="pos">X — Y —</span>
       <span id="pen">pen —</span>
       <span id="job"></span>
+      <span class="spacer"></span>
+      <button id="settings-open">Settings</button>
       <button id="stop" class="danger">Stop</button>
     </header>
 
@@ -65,14 +67,62 @@
         </div>
       </section>
 
-      <section class="console">
-        <pre id="log"></pre>
-        <form id="cmd-form">
-          <input id="cmd" placeholder="G-code or $ command" autocomplete="off" spellcheck="false" />
-          <button>Send</button>
-        </form>
+      <section class="side">
+        <nav class="tabs">
+          <button data-tab="console" class="active">Console</button>
+          <button data-tab="script">Script</button>
+        </nav>
+
+        <div id="tab-console" class="tab">
+          <pre id="log"></pre>
+          <form id="cmd-form">
+            <input id="cmd" placeholder="G-code or $ command" autocomplete="off" spellcheck="false" />
+            <button>Send</button>
+          </form>
+        </div>
+
+        <div id="tab-script" class="tab" hidden>
+          <textarea id="script" spellcheck="false"></textarea>
+          <div class="script-bar">
+            <span id="script-error"></span>
+            <span class="spacer"></span>
+            <button id="script-run" title="Ctrl/⌘ + Enter">Build drawing</button>
+          </div>
+        </div>
       </section>
     </main>
+
+    <dialog id="settings">
+      <form method="dialog">
+        <h2>Settings</h2>
+        <fieldset>
+          <legend>Bed (mm from origin)</legend>
+          <label>Width <input data-key="bedWidth" type="number" min="1" step="any" required /></label>
+          <label>Height <input data-key="bedHeight" type="number" min="1" step="any" required /></label>
+        </fieldset>
+        <fieldset>
+          <legend>Pen servo</legend>
+          <label>Up S <span><input data-key="penUpValue" type="number" min="0" max="255" required /> <button type="button" data-test="penUpValue">Test</button></span></label>
+          <label>Down S <span><input data-key="penDownValue" type="number" min="0" max="255" required /> <button type="button" data-test="penDownValue">Test</button></span></label>
+          <label>Delay (s) <input data-key="penDelay" type="number" min="0" step="0.05" required /></label>
+        </fieldset>
+        <fieldset>
+          <legend>Motion</legend>
+          <label>Draw feed (mm/min) <input data-key="drawFeed" type="number" min="1" required /></label>
+          <label>Pen down at Z ≤ <input data-key="zThreshold" type="number" step="any" required /></label>
+          <label>Baud rate <input data-key="baudRate" type="number" min="1" required /></label>
+        </fieldset>
+        <label class="block">Start G-code <textarea data-key="startGcode" rows="4" spellcheck="false"></textarea></label>
+        <label class="block">End G-code <textarea data-key="endGcode" rows="4" spellcheck="false"></textarea></label>
+        <p class="hint">{penUp} and {penDown} expand to the pen commands. Baud rate applies on next connect.</p>
+        <div class="row">
+          <button type="button" id="settings-reset">Reset defaults</button>
+          <span class="spacer"></span>
+          <button value="cancel" formnovalidate>Cancel</button>
+          <button value="save" class="primary">Save</button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

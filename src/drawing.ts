@@ -9,8 +9,9 @@ export type Path = Point[];
  *   await plotter.plot(d);
  */
 export class Drawing {
-  readonly paths: Path[] = [];
   private current: Path | null = null;
+
+  constructor(readonly paths: Path[] = []) {}
 
   moveTo(x: number, y: number): this {
     this.current = [[x, y]];

@@ -1,10 +1,13 @@
 import { Drawing, type Path } from './drawing';
 import { Emitter } from './emitter';
-import { fmt, PenFilter, type PenState } from './gcode';
+import { fmt, PenFilter, summarizeGcode, type PenState } from './gcode';
 import { Grbl, REALTIME, type GrblStatus } from './grbl';
 
 export interface PlotterConfig {
   baudRate: number;
+  /** Drawable area in mm, measured from the work origin (X0 Y0). */
+  bedWidth: number;
+  bedHeight: number;
   /** Servo S value for pen up (0–255 with $30=255). */
   penUpValue: number;
   /** Servo S value for pen down. */
@@ -23,6 +26,8 @@ export interface PlotterConfig {
 
 export const DEFAULT_CONFIG: PlotterConfig = {
   baudRate: 115200,
+  bedWidth: 300,
+  bedHeight: 200,
   penUpValue: 0,
   penDownValue: 255,
   penDelay: 0.2,
@@ -42,6 +47,17 @@ export interface JobOptions {
   start?: boolean;
   /** Send end G-code last (default true). */
   end?: boolean;
+  /** Run even if the job goes outside the bed (default false). */
+  ignoreBounds?: boolean;
+}
+
+export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
+
+export class BoundsError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BoundsError';
+  }
 }
 
 type PlotterEvents = {
@@ -160,6 +176,7 @@ export class Plotter extends Emitter<PlotterEvents> {
   /** Travel to (x, y) with the pen lifted. */
   async moveTo(x: number, y: number): Promise<void> {
     this.assertIdle();
+    this.assertInBed({ minX: x, minY: y, maxX: x, maxY: y });
     if (this.pen !== 'up') await this.penUp();
     await this.grbl.send(`G0X${fmt(x)}Y${fmt(y)}`);
   }
@@ -167,6 +184,7 @@ export class Plotter extends Emitter<PlotterEvents> {
   /** Draw a line to (x, y) with the pen down. */
   async lineTo(x: number, y: number, feed = this.config.drawFeed): Promise<void> {
     this.assertIdle();
+    this.assertInBed({ minX: x, minY: y, maxX: x, maxY: y });
     if (this.pen !== 'down') await this.penDown();
     await this.grbl.send(`G1X${fmt(x)}Y${fmt(y)}F${fmt(feed)}`);
   }
@@ -214,12 +232,15 @@ export class Plotter extends Emitter<PlotterEvents> {
 
   /** Plots a Drawing (or raw paths) wrapped in start/end G-code. */
   plot(drawing: Drawing | Path[], options?: JobOptions): Promise<void> {
-    const paths = drawing instanceof Drawing ? drawing.paths : drawing;
+    const d = drawing instanceof Drawing ? drawing : new Drawing(drawing);
+    if (!options?.ignoreBounds) this.assertInBed(d.bounds());
+    const paths = d.paths;
     return this.runLines(this.pathsToGcode(paths), options);
   }
 
   /** Runs a G-code program (file contents) wrapped in start/end G-code. */
   run(gcode: string, options?: JobOptions): Promise<void> {
+    if (!options?.ignoreBounds) this.assertInBed(summarizeGcode(gcode).bounds);
     const filter = this.newPenFilter();
     filter.pen = options?.start === false ? 'unknown' : 'up'; // start G-code lifts the pen
     const lines = gcode.split('\n').flatMap((l) => filter.filter(l));
@@ -356,6 +377,24 @@ export class Plotter extends Emitter<PlotterEvents> {
 
   private sendAll(lines: string[]): Promise<void> {
     return Promise.all(lines.map((l) => this.grbl.send(l))).then(() => {});
+  }
+
+  /** Describes how `bounds` exceeds the bed, or returns null if it fits. */
+  outOfBounds(bounds: Bounds | null): string | null {
+    if (!bounds) return null;
+    const { bedWidth: w, bedHeight: h } = this.config;
+    const eps = 1e-6;
+    const issues: string[] = [];
+    if (bounds.minX < -eps) issues.push(`X ${fmt(bounds.minX)} < 0`);
+    if (bounds.maxX > w + eps) issues.push(`X ${fmt(bounds.maxX)} > ${fmt(w)}`);
+    if (bounds.minY < -eps) issues.push(`Y ${fmt(bounds.minY)} < 0`);
+    if (bounds.maxY > h + eps) issues.push(`Y ${fmt(bounds.maxY)} > ${fmt(h)}`);
+    return issues.length ? `Outside bed: ${issues.join(', ')}` : null;
+  }
+
+  private assertInBed(bounds: Bounds | null): void {
+    const problem = this.outOfBounds(bounds);
+    if (problem) throw new BoundsError(problem);
   }
 
   private assertIdle(): void {
