@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>plötr.</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header>
+      <strong class="brand">plötr.</strong>
+      <button id="connect">Connect</button>
+      <span id="state" class="badge">Offline</span>
+      <span id="pos">X — Y —</span>
+      <span id="pen">pen —</span>
+      <span id="job"></span>
+      <button id="stop" class="danger">Stop</button>
+    </header>
+
+    <div id="file-bar" hidden>
+      <strong id="file-name"></strong>
+      <span id="file-info"></span>
+      <span id="file-result"></span>
+      <span class="spacer"></span>
+      <button id="file-run" class="primary">Run</button>
+      <button id="file-pause" hidden>Pause</button>
+      <button id="file-clear">Cancel</button>
+    </div>
+
+    <main>
+      <section class="controls">
+        <div class="jog">
+          <button data-jog="-1,1">↖</button>
+          <button data-jog="0,1">↑</button>
+          <button data-jog="1,1">↗</button>
+          <button data-jog="-1,0">←</button>
+          <button id="origin" title="Go to origin">⌂</button>
+          <button data-jog="1,0">→</button>
+          <button data-jog="-1,-1">↙</button>
+          <button data-jog="0,-1">↓</button>
+          <button data-jog="1,-1">↘</button>
+        </div>
+
+        <label>Step (mm)
+          <select id="step">
+            <option>0.1</option>
+            <option>1</option>
+            <option selected>10</option>
+            <option>50</option>
+          </select>
+        </label>
+        <label>Feed (mm/min) <input id="feed" type="number" min="1" step="100" /></label>
+
+        <div class="row">
+          <button id="pen-up">Pen up</button>
+          <button id="pen-down">Pen down</button>
+        </div>
+        <button id="open">Open G-code…</button>
+        <input id="file-input" type="file" accept=".gcode,.nc,.gc,.ngc,.txt" hidden />
+
+        <div class="row">
+          <button id="unlock" title="$X — clear alarm">Unlock</button>
+          <button id="home" title="$H — homing cycle">Home</button>
+          <button id="set-origin" title="Make current position X0 Y0">Set origin</button>
+        </div>
+      </section>
+
+      <section class="console">
+        <pre id="log"></pre>
+        <form id="cmd-form">
+          <input id="cmd" placeholder="G-code or $ command" autocomplete="off" spellcheck="false" />
+          <button>Send</button>
+        </form>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
