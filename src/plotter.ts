@@ -283,9 +283,9 @@ export class Plotter extends Emitter<PlotterEvents> {
     const state = this.grbl.status?.state;
     if (state === 'Jog') {
       await this.grbl.realtime(REALTIME.jogCancel);
-    } else if (state === 'Run' || state === 'Hold') {
+    } else if (state === 'Run' || state === 'Hold' || state === 'Queue') {
       await this.grbl.feedHold();
-      await this.grbl.waitForStatus((s) => (s.state === 'Hold' && s.subState === 0) || s.state === 'Idle', 10000);
+      await this.grbl.waitForHalt();
     }
     const ready = new Promise<void>((r) => {
       const off = this.grbl.on('ready', () => (off(), r()));

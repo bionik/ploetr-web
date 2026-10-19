@@ -54,7 +54,7 @@ header {
 }
 .badge[data-state='Idle'] { background: var(--ok); color: #fff; }
 .badge[data-state='Run'], .badge[data-state='Jog'], .badge[data-state='Home'] { background: var(--accent); color: #fff; }
-.badge[data-state='Hold'], .badge[data-state='Door'] { background: var(--warn); color: #fff; }
+.badge[data-state='Hold'], .badge[data-state='Queue'], .badge[data-state='Door'] { background: var(--warn); color: #fff; }
 .badge[data-state='Alarm'] { background: var(--danger); color: #fff; }
 
 main {

@@ -168,6 +168,20 @@ export class Grbl extends Emitter<GrblEvents> {
     });
   }
 
+  /**
+   * Resolves once a feed hold has brought the machine to rest. GRBL 1.1 reports
+   * Hold:0; GRBL 0.9 has no sub-state, so wait until two reports show the same position.
+   */
+  waitForHalt(timeoutMs = 10000): Promise<GrblStatus> {
+    let last: Position | null = null;
+    return this.waitForStatus((s) => {
+      if (s.state === 'Idle' || (s.state === 'Hold' && s.subState === 0)) return true;
+      const still = !!last && !!s.mpos && s.mpos.x === last.x && s.mpos.y === last.y;
+      last = s.mpos;
+      return (s.state === 'Hold' || s.state === 'Queue') && s.subState === null && still;
+    }, timeoutMs);
+  }
+
   /** Strips comments and whitespace; GRBL ignores spaces and this saves RX buffer. */
   static clean(line: string): string {
     return line
@@ -204,7 +218,8 @@ export class Grbl extends Emitter<GrblEvents> {
       if (line === 'ok') done.resolve();
       else done.reject(new GrblError(`${line} (${done.line})`, done.line, line.slice(6)));
       this.pump();
-    } else if (/^Grbl\s/i.test(line)) {
+    } else if (/Grbl\s+\d/i.test(line)) {
+      // Matched anywhere: bootloader noise can precede the banner on the same line.
       // Controller (re)booted: everything in flight was discarded.
       this.version = line.match(/Grbl\s+([\d.]+\w*)/i)?.[1] ?? null;
       this.failAll(new Error('GRBL reset'));

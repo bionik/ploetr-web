@@ -49,6 +49,9 @@ function log(text: string, cls: string): void {
   if (atBottom) logEl.scrollTop = logEl.scrollHeight;
 }
 
+/** GRBL 0.9 reports a completed feed hold as Queue, 1.1 as Hold. */
+const isPaused = (state?: string) => state === 'Hold' || state === 'Queue';
+
 /** Runs a UI action, logging failures instead of throwing. */
 function act(fn: () => Promise<unknown>): void {
   fn().catch((e: Error) => log(e.message, 'error'));
@@ -84,7 +87,7 @@ plotter.on('status', (s) => {
   $('state').dataset.state = s.state;
   if (s.wpos) $('pos').textContent = `X ${s.wpos.x.toFixed(2)} Y ${s.wpos.y.toFixed(2)}`;
   $('pen').textContent = `pen ${plotter.pen === 'unknown' ? '—' : plotter.pen}`;
-  $('file-pause').textContent = s.state === 'Hold' ? 'Resume' : 'Pause';
+  $('file-pause').textContent = isPaused(s.state) ? 'Resume' : 'Pause';
 });
 
 plotter.on('job', (job) => {
@@ -297,7 +300,7 @@ fileInput.addEventListener('change', () => {
 });
 $('file-run').addEventListener('click', () => act(runLoaded));
 $('file-pause').addEventListener('click', () =>
-  act(() => (plotter.status?.state === 'Hold' ? plotter.resume() : plotter.pause())),
+  act(() => (isPaused(plotter.status?.state) ? plotter.resume() : plotter.pause())),
 );
 $('file-clear').addEventListener('click', () => {
   loaded = null;
