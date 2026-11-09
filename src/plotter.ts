@@ -206,12 +206,6 @@ export class Plotter extends Emitter<PlotterEvents> {
     }
   }
 
-  /** Runs the homing cycle ($H). Needs homing enabled ($22=1). */
-  home(): Promise<void> {
-    this.assertIdle();
-    return this.grbl.send('$H');
-  }
-
   /** Clears an alarm lock ($X). */
   unlock(): Promise<void> {
     return this.grbl.send('$X');

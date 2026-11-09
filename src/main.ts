@@ -344,7 +344,6 @@ $('origin').addEventListener('click', () => act(() => plotter.goOrigin()));
 $('pen-up').addEventListener('click', () => act(() => plotter.penUp()));
 $('pen-down').addEventListener('click', () => act(() => plotter.penDown()));
 $('unlock').addEventListener('click', () => act(() => plotter.unlock()));
-$('home').addEventListener('click', () => act(() => plotter.home()));
 $('set-origin').addEventListener('click', () => act(() => plotter.setOrigin()));
 
 $('cmd-form').addEventListener('submit', (e) => {
