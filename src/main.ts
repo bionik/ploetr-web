@@ -190,7 +190,39 @@ async function runLoaded(): Promise<void> {
 const SCRIPT_KEY = 'ploetr-web.script';
 const DEFAULT_SCRIPT = `// d is an empty Drawing (mm from the work origin), plotter is the API.
 // "Build drawing" loads the result into the bar above; Run plots it.
-// Returning a Drawing uses that instead of d.
+// Returning a Drawing uses that instead of d. Clear this editor and
+// reload the page to get this example back.
+//
+// Drawing (only records paths; chainable, e.g. d.rect(...).circle(...))
+//   d.moveTo(x, y)                    start a new stroke at (x, y)
+//   d.lineTo(x, y)                    extend the current stroke
+//   d.polyline([[x, y], ...], closed?)
+//   d.rect(x, y, w, h)
+//   d.circle(cx, cy, r, segments?)
+//   d.arc(cx, cy, r, start, end, segments?)   angles in radians
+//   d.bounds()                        {minX, minY, maxX, maxY} or null
+//   d.paths                           [[[x, y], ...], ...]
+//   new Drawing(paths?)               another drawing
+//
+// plotter: these act on the machine immediately, already while the
+// script is being built, so prefer d for anything that should be reviewed.
+//   plotter.penUp() / penDown()
+//   plotter.moveTo(x, y)              pen up (if needed), travel
+//   plotter.lineTo(x, y, feed?)       pen down (if needed), draw; stays down
+//   plotter.jog(dx, dy, feed?)        relative move
+//   plotter.goOrigin() / setOrigin()  go to / set work X0 Y0
+//   plotter.send('G-code')            raw G-code, Z is filtered
+//   plotter.idle()                    wait until motion has finished
+//   plotter.plot(drawing, options?)   run a drawing with start/end G-code
+//   plotter.run(gcode, options?)      run G-code text with start/end G-code
+//     options: { start?, end?, ignoreBounds? }
+//   plotter.pause() / resume() / stop()
+//   plotter.unlock()                  clear an alarm ($X)
+//   plotter.pathsToGcode(d.paths)     G-code lines for paths
+//   plotter.outOfBounds(d.bounds())   message if outside the bed, else null
+//   plotter.config / setConfig({...}) / resetConfig()
+//   plotter.pen, plotter.status, plotter.job, plotter.connected
+//   plotter.on('status' | 'job' | 'log' | 'connection', fn)
 
 d.rect(10, 10, 80, 60);
 d.circle(50, 40, 20);
@@ -201,7 +233,8 @@ const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (
 ) => (...args: unknown[]) => Promise<unknown>;
 
 const scriptEl = $<HTMLTextAreaElement>('script');
-scriptEl.value = storage.get(SCRIPT_KEY) ?? DEFAULT_SCRIPT;
+// An empty editor falls back to the example on the next load.
+scriptEl.value = storage.get(SCRIPT_KEY) || DEFAULT_SCRIPT;
 scriptEl.addEventListener('input', () => storage.set(SCRIPT_KEY, scriptEl.value));
 
 async function buildScript(): Promise<void> {
