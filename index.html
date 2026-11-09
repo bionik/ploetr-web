@@ -32,15 +32,16 @@
     <main>
       <section class="controls">
         <div class="jog">
-          <button data-jog="-1,1">↖</button>
-          <button data-jog="0,1">↑</button>
-          <button data-jog="1,1">↗</button>
+          <!-- Machine +Y points down the page (origin top-left), so ↑ is −Y. -->
+          <button data-jog="-1,-1">↖</button>
+          <button data-jog="0,-1">↑</button>
+          <button data-jog="1,-1">↗</button>
           <button data-jog="-1,0">←</button>
           <button id="origin" title="Go to origin">⌂</button>
           <button data-jog="1,0">→</button>
-          <button data-jog="-1,-1">↙</button>
-          <button data-jog="0,-1">↓</button>
-          <button data-jog="1,-1">↘</button>
+          <button data-jog="-1,1">↙</button>
+          <button data-jog="0,1">↓</button>
+          <button data-jog="1,1">↘</button>
         </div>
 
         <label>Step (mm)
@@ -96,7 +97,7 @@
       <form method="dialog">
         <h2>Settings</h2>
         <fieldset>
-          <legend>Bed (mm from origin)</legend>
+          <legend>Bed (mm right and down from origin)</legend>
           <label>Width <input data-key="bedWidth" type="number" min="1" step="any" required /></label>
           <label>Height <input data-key="bedHeight" type="number" min="1" step="any" required /></label>
         </fieldset>

@@ -15,9 +15,13 @@ Drop a file anywhere on the page, or use **Open G-code…**. The bar that appear
 
 **Settings** in the header edits the bed size, servo S values (with **Test** buttons to try them on the machine), pen delay, draw feed, Z threshold, baud rate and start/end G-code. Settings are saved in localStorage.
 
+## Coordinates
+
+The origin (X0 Y0) is the top-left corner of the drawing area. X goes right and Y goes down, which is also the machine's own +Y direction, so scripts, G-code and GRBL all use the same numbers without conversion. The jog pad's ↑ sends −Y. Arc angles start at +X and increase clockwise on paper.
+
 ## Bed bounds
 
-The bed is measured from the work origin (set it with **Set origin**). A file or drawing that goes outside it shows a warning, and the button becomes **Run anyway**. The API throws a `BoundsError` unless you pass `{ ignoreBounds: true }`. `moveTo`/`lineTo` always check bounds; jogging never does.
+The bed spans X 0…width and Y 0…height from the work origin (set it with **Set origin** at the top-left corner). A file or drawing that goes outside it shows a warning, and the button becomes **Run anyway**. The API throws a `BoundsError` unless you pass `{ ignoreBounds: true }`. `moveTo`/`lineTo` always check bounds; jogging never does.
 
 ## Script
 

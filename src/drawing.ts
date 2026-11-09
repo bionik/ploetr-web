@@ -43,7 +43,10 @@ export class Drawing {
     return this.arc(cx, cy, r, 0, 2 * Math.PI, segments);
   }
 
-  /** Arc from `start` to `end` (radians, counter-clockwise for end > start). */
+  /**
+   * Arc from `start` to `end` in radians. Angle 0 points right (+X); with Y pointing
+   * down the page, increasing angles turn clockwise as seen on paper.
+   */
   arc(cx: number, cy: number, r: number, start: number, end: number,
       segments = Math.max(4, Math.ceil(Math.abs(end - start) * r))): this {
     const pts: Point[] = [];

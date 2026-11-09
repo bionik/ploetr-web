@@ -188,7 +188,8 @@ async function runLoaded(): Promise<void> {
 // ---- script ---------------------------------------------------------------
 
 const SCRIPT_KEY = 'ploetr-web.script';
-const DEFAULT_SCRIPT = `// d is an empty Drawing (mm from the work origin), plotter is the API.
+const DEFAULT_SCRIPT = `// d is an empty Drawing in mm: (0, 0) is the origin at the top-left,
+// x goes right and y goes down. plotter is the API.
 // "Build drawing" loads the result into the bar above; Run plots it.
 // Returning a Drawing uses that instead of d. Clear this editor and
 // reload the page to get this example back.
@@ -199,7 +200,7 @@ const DEFAULT_SCRIPT = `// d is an empty Drawing (mm from the work origin), plot
 //   d.polyline([[x, y], ...], closed?)
 //   d.rect(x, y, w, h)
 //   d.circle(cx, cy, r, segments?)
-//   d.arc(cx, cy, r, start, end, segments?)   angles in radians
+//   d.arc(cx, cy, r, start, end, segments?)   radians, 0 = right, clockwise
 //   d.bounds()                        {minX, minY, maxX, maxY} or null
 //   d.paths                           [[[x, y], ...], ...]
 //   new Drawing(paths?)               another drawing
