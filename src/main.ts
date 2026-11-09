@@ -203,26 +203,6 @@ const DEFAULT_SCRIPT = `// d is an empty Drawing (mm from the work origin), plot
 //   d.bounds()                        {minX, minY, maxX, maxY} or null
 //   d.paths                           [[[x, y], ...], ...]
 //   new Drawing(paths?)               another drawing
-//
-// plotter: these act on the machine immediately, already while the
-// script is being built, so prefer d for anything that should be reviewed.
-//   plotter.penUp() / penDown()
-//   plotter.moveTo(x, y)              pen up (if needed), travel
-//   plotter.lineTo(x, y, feed?)       pen down (if needed), draw; stays down
-//   plotter.jog(dx, dy, feed?)        relative move
-//   plotter.goOrigin() / setOrigin()  go to / set work X0 Y0
-//   plotter.send('G-code')            raw G-code, Z is filtered
-//   plotter.idle()                    wait until motion has finished
-//   plotter.plot(drawing, options?)   run a drawing with start/end G-code
-//   plotter.run(gcode, options?)      run G-code text with start/end G-code
-//     options: { start?, end?, ignoreBounds? }
-//   plotter.pause() / resume() / stop()
-//   plotter.unlock()                  clear an alarm ($X)
-//   plotter.pathsToGcode(d.paths)     G-code lines for paths
-//   plotter.outOfBounds(d.bounds())   message if outside the bed, else null
-//   plotter.config / setConfig({...}) / resetConfig()
-//   plotter.pen, plotter.status, plotter.job, plotter.connected
-//   plotter.on('status' | 'job' | 'log' | 'connection', fn)
 
 d.rect(10, 10, 80, 60);
 d.circle(50, 40, 20);
