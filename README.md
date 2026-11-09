@@ -17,11 +17,16 @@ Drop a file anywhere on the page, or use **Open G-code…**. The bar that appear
 
 ## Coordinates
 
-The origin (X0 Y0) is the top-left corner of the drawing area. X goes right and Y goes down, which is also the machine's own +Y direction, so scripts, G-code and GRBL all use the same numbers without conversion. The jog pad's ↑ sends −Y. Arc angles start at +X and increase clockwise on paper.
+The work origin (X0 Y0) is the top-left corner of the drawing area. Set it with **Set origin**.
+
+- **Page coordinates** are used by scripts, `Drawing`, `plotter.moveTo`/`lineTo`/`jog`, the bed check and the position in the header: mm from the origin, x to the right, y down the page, all positive.
+- **Machine coordinates** are what GRBL uses, in raw G-code (`plotter.send`, G-code files). The setting **Machine +Y moves pen up/down** connects the two. With *down* (the default), page and machine coordinates are the same and the drawing area is X 0…width, Y 0…height. With *up*, page y = machine −Y and the area is Y −height…0.
+
+Arc angles start at +x and increase clockwise on the page.
 
 ## Bed bounds
 
-The bed spans X 0…width and Y 0…height from the work origin (set it with **Set origin** at the top-left corner). A file or drawing that goes outside it shows a warning, and the button becomes **Run anyway**. The API throws a `BoundsError` unless you pass `{ ignoreBounds: true }`. `moveTo`/`lineTo` always check bounds; jogging never does.
+A file or drawing that goes outside the bed shows a warning, and the button becomes **Run anyway**. The API throws a `BoundsError` unless you pass `{ ignoreBounds: true }`. `moveTo`/`lineTo` always check bounds. Jogging stops at the bed edges, but can always move back toward the bed. Raw G-code sent from the console is not checked. GRBL's own soft limits need homing switches, so the app's checks are the only limit.
 
 ## Script
 

@@ -5,9 +5,14 @@ import { Grbl, REALTIME, type GrblStatus } from './grbl';
 
 export interface PlotterConfig {
   baudRate: number;
-  /** Drawable area in mm, measured from the work origin (X0 Y0). */
+  /**
+   * Drawable area in mm, right and down from the work origin at its top-left
+   * corner. In page coordinates the bed is x 0…bedWidth, y 0…bedHeight.
+   */
   bedWidth: number;
   bedHeight: number;
+  /** Which way machine +Y moves the pen on the page. 'up' maps page y to machine −Y. */
+  yAxis: 'up' | 'down';
   /** Servo S value for pen up (0–255 with $30=255). */
   penUpValue: number;
   /** Servo S value for pen down. */
@@ -28,6 +33,7 @@ export const DEFAULT_CONFIG: PlotterConfig = {
   baudRate: 115200,
   bedWidth: 300,
   bedHeight: 200,
+  yAxis: 'down',
   penUpValue: 0,
   penDownValue: 255,
   penDelay: 0.2,
@@ -52,6 +58,7 @@ export interface JobOptions {
 }
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
+export type Position = { x: number; y: number };
 
 export class BoundsError extends Error {
   constructor(message: string) {
@@ -76,6 +83,10 @@ const JOB_WINDOW = 64;
  * Pen plotter on GRBL-servo firmware. Z never moves: the pen is a
  * servo driven by M3 S<value>.
  *
+ * The API uses page coordinates: mm from the work origin at the top-left
+ * corner, x to the right, y down. They are converted to machine coordinates
+ * (see `yAxis`). Raw G-code (`send`, `run`) is always machine coordinates.
+ *
  *   await plotter.connect();
  *   await plotter.plot(new Drawing().circle(50, 50, 20));
  *   await plotter.run(gcodeText);
@@ -88,11 +99,21 @@ export class Plotter extends Emitter<PlotterEvents> {
 
   private penFilter = this.newPenFilter();
   private stopRequested = false;
+  /** Where queued jogs will leave the pen, until a status report catches up. */
+  private jogTarget: Position | null = null;
+  private jogAckAt = 0;
 
   constructor() {
     super();
-    this.grbl.on('status', (s) => this.emit('status', s));
+    this.grbl.on('status', (s) => {
+      // Two status polls after the last jog was accepted, an Idle report is authoritative again.
+      if (this.jogTarget && s.state === 'Idle' && !this.grbl.pendingCount && Date.now() - this.jogAckAt > 400) {
+        this.jogTarget = null;
+      }
+      this.emit('status', s);
+    });
     this.grbl.on('connection', (c) => {
+      this.jogTarget = null;
       if (!c) this.pen = 'unknown';
       this.emit('connection', c);
     });
@@ -106,6 +127,30 @@ export class Plotter extends Emitter<PlotterEvents> {
 
   get status(): GrblStatus | null {
     return this.grbl.status;
+  }
+
+  /** Current work position in page coordinates, or null before the first status report. */
+  get position(): Position | null {
+    const w = this.grbl.status?.wpos;
+    return w ? this.toPage(w.x, w.y) : null;
+  }
+
+  /** Page (x right, y down) → machine work coordinates. */
+  toMachine(x: number, y: number): Position {
+    return { x, y: this.config.yAxis === 'up' ? -y : y };
+  }
+
+  /** Machine work coordinates → page coordinates. */
+  toPage(x: number, y: number): Position {
+    return this.toMachine(x, y); // the mapping is its own inverse
+  }
+
+  /** Converts machine-coordinate bounds (e.g. of a G-code file) to page coordinates. */
+  pageBounds(machine: Bounds | null): Bounds | null {
+    if (!machine) return null;
+    const a = this.toPage(machine.minX, machine.minY);
+    const b = this.toPage(machine.maxX, machine.maxY);
+    return { minX: Math.min(a.x, b.x), minY: Math.min(a.y, b.y), maxX: Math.max(a.x, b.x), maxY: Math.max(a.y, b.y) };
   }
 
   // ---- connection -------------------------------------------------------
@@ -155,6 +200,7 @@ export class Plotter extends Emitter<PlotterEvents> {
    */
   async send(gcode: string): Promise<void> {
     this.assertIdle();
+    this.jogTarget = null;
     this.penFilter.pen = this.pen;
     const lines = gcode.split('\n').flatMap((l) => this.penFilter.filter(l));
     this.pen = this.penFilter.pen;
@@ -177,16 +223,18 @@ export class Plotter extends Emitter<PlotterEvents> {
   async moveTo(x: number, y: number): Promise<void> {
     this.assertIdle();
     this.assertInBed({ minX: x, minY: y, maxX: x, maxY: y });
+    this.jogTarget = null;
     if (this.pen !== 'up') await this.penUp();
-    await this.grbl.send(`G0X${fmt(x)}Y${fmt(y)}`);
+    await this.grbl.send(`G0${this.xy(x, y)}`);
   }
 
   /** Draw a line to (x, y) with the pen down. */
   async lineTo(x: number, y: number, feed = this.config.drawFeed): Promise<void> {
     this.assertIdle();
     this.assertInBed({ minX: x, minY: y, maxX: x, maxY: y });
+    this.jogTarget = null;
     if (this.pen !== 'down') await this.penDown();
-    await this.grbl.send(`G1X${fmt(x)}Y${fmt(y)}F${fmt(feed)}`);
+    await this.grbl.send(`G1${this.xy(x, y)}F${fmt(feed)}`);
   }
 
   /** Resolves when all queued motion has physically finished. */
@@ -194,16 +242,33 @@ export class Plotter extends Emitter<PlotterEvents> {
     return this.grbl.synchronize();
   }
 
-  /** Relative XY jog. Uses $J= on GRBL 1.1 (cancellable), plain G91 moves otherwise. */
+  /**
+   * Relative jog in page directions (dy > 0 moves down the page). The move is
+   * shortened so the pen stays on the bed. Uses $J= on GRBL 1.1, G91 moves otherwise.
+   */
   async jog(dx: number, dy: number, feed = this.config.drawFeed): Promise<void> {
     this.assertIdle();
-    const axes = `${dx ? `X${fmt(dx)}` : ''}${dy ? `Y${fmt(dy)}` : ''}`;
-    if (!axes) return;
+    const from = this.jogTarget ?? this.position;
+    if (!from) throw new Error('Position unknown: wait for a status report');
+    const { bedWidth: w, bedHeight: h } = this.config;
+    // Per axis, never move further outside 0…max; moving back toward the bed is always allowed.
+    const limit = (from: number, d: number, max: number) =>
+      d > 0 ? Math.min(from + d, Math.max(from, max)) : d < 0 ? Math.max(from + d, Math.min(from, 0)) : from;
+    const to = { x: limit(from.x, dx, w), y: limit(from.y, dy, h) };
+    const step = this.toMachine(to.x - from.x, to.y - from.y);
+    const axes = `${Math.abs(step.x) > 1e-6 ? `X${fmt(step.x)}` : ''}${Math.abs(step.y) > 1e-6 ? `Y${fmt(step.y)}` : ''}`;
+    if (!axes) {
+      this.info('At the edge of the bed');
+      return;
+    }
+    if (to.x !== from.x + dx || to.y !== from.y + dy) this.info('Jog stopped at the edge of the bed');
+    this.jogTarget = to;
     if (this.grbl.supportsJog) {
       await this.grbl.send(`$J=G21G91${axes}F${fmt(feed)}`);
     } else {
       await this.sendAll(['G91', `G1${axes}F${fmt(feed)}`, 'G90']);
     }
+    this.jogAckAt = Date.now();
   }
 
   /** Clears an alarm lock ($X). */
@@ -214,6 +279,7 @@ export class Plotter extends Emitter<PlotterEvents> {
   /** Makes the current position the work origin (X0 Y0). */
   setOrigin(): Promise<void> {
     this.assertIdle();
+    this.jogTarget = null;
     return this.grbl.send('G10L20P1X0Y0');
   }
 
@@ -234,7 +300,7 @@ export class Plotter extends Emitter<PlotterEvents> {
 
   /** Runs a G-code program (file contents) wrapped in start/end G-code. */
   run(gcode: string, options?: JobOptions): Promise<void> {
-    if (!options?.ignoreBounds) this.assertInBed(summarizeGcode(gcode).bounds);
+    if (!options?.ignoreBounds) this.assertInBed(this.pageBounds(summarizeGcode(gcode).bounds));
     const filter = this.newPenFilter();
     filter.pen = options?.start === false ? 'unknown' : 'up'; // start G-code lifts the pen
     const lines = gcode.split('\n').flatMap((l) => filter.filter(l));
@@ -243,15 +309,15 @@ export class Plotter extends Emitter<PlotterEvents> {
     return this.runLines(body, options);
   }
 
-  /** Converts pen paths to G-code lines (without start/end G-code). */
+  /** Converts pen paths (page coordinates) to G-code lines, without start/end G-code. */
   pathsToGcode(paths: Path[]): string[] {
     const out: string[] = [];
     const feed = fmt(this.config.drawFeed);
     for (const path of paths) {
       if (!path.length) continue;
       const [[x0, y0], ...rest] = path;
-      out.push(`G0X${fmt(x0)}Y${fmt(y0)}`, ...this.penCommands('down'));
-      rest.forEach(([x, y], i) => out.push(`G1X${fmt(x)}Y${fmt(y)}${i === 0 ? `F${feed}` : ''}`));
+      out.push(`G0${this.xy(x0, y0)}`, ...this.penCommands('down'));
+      rest.forEach(([x, y], i) => out.push(`G1${this.xy(x, y)}${i === 0 ? `F${feed}` : ''}`));
       out.push(...this.penCommands('up'));
     }
     return out;
@@ -273,6 +339,7 @@ export class Plotter extends Emitter<PlotterEvents> {
   async stop(): Promise<void> {
     if (!this.connected) return;
     this.stopRequested = true;
+    this.jogTarget = null;
     this.grbl.clearQueue('Stopped');
     const state = this.grbl.status?.state;
     if (state === 'Jog') {
@@ -296,6 +363,7 @@ export class Plotter extends Emitter<PlotterEvents> {
   private async runLines(body: string[], { start = true, end = true }: JobOptions = {}): Promise<void> {
     this.assertIdle();
     this.stopRequested = false;
+    this.jogTarget = null;
     const lines = [
       ...(start ? this.expand(this.config.startGcode) : []),
       ...body,
@@ -346,6 +414,12 @@ export class Plotter extends Emitter<PlotterEvents> {
 
   // ---- helpers ----------------------------------------------------------
 
+  /** Machine X/Y words for a page point. */
+  private xy(x: number, y: number): string {
+    const m = this.toMachine(x, y);
+    return `X${fmt(m.x)}Y${fmt(m.y)}`;
+  }
+
   private penCommands(state: 'up' | 'down'): string[] {
     const value = state === 'up' ? this.config.penUpValue : this.config.penDownValue;
     return [`M3S${value}`, `G4P${fmt(this.config.penDelay)}`];
@@ -373,7 +447,7 @@ export class Plotter extends Emitter<PlotterEvents> {
     return Promise.all(lines.map((l) => this.grbl.send(l))).then(() => {});
   }
 
-  /** Describes how `bounds` exceeds the bed, or returns null if it fits. */
+  /** Describes how `bounds` (page coordinates) exceeds the bed, or returns null if it fits. */
   outOfBounds(bounds: Bounds | null): string | null {
     if (!bounds) return null;
     const { bedWidth: w, bedHeight: h } = this.config;

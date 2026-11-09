@@ -32,7 +32,7 @@
     <main>
       <section class="controls">
         <div class="jog">
-          <!-- Machine +Y points down the page (origin top-left), so ↑ is −Y. -->
+          <!-- Page directions (y down); Plotter.jog converts them using the Y-axis setting. -->
           <button data-jog="-1,-1">↖</button>
           <button data-jog="0,-1">↑</button>
           <button data-jog="1,-1">↗</button>
@@ -111,6 +111,12 @@
           <legend>Motion</legend>
           <label>Draw feed (mm/min) <input data-key="drawFeed" type="number" min="1" required /></label>
           <label>Pen down at Z ≤ <input data-key="zThreshold" type="number" step="any" required /></label>
+          <label>Machine +Y moves pen
+            <select data-key="yAxis">
+              <option value="down">down</option>
+              <option value="up">up</option>
+            </select>
+          </label>
           <label>Baud rate <input data-key="baudRate" type="number" min="1" required /></label>
         </fieldset>
         <label class="block">Start G-code <textarea data-key="startGcode" rows="4" spellcheck="false"></textarea></label>

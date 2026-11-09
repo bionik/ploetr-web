@@ -85,7 +85,8 @@ plotter.on('connection', (connected) => {
 plotter.on('status', (s) => {
   $('state').textContent = s.subState !== null ? `${s.state}:${s.subState}` : s.state;
   $('state').dataset.state = s.state;
-  if (s.wpos) $('pos').textContent = `X ${s.wpos.x.toFixed(2)} Y ${s.wpos.y.toFixed(2)}`;
+  const p = plotter.position;
+  if (p) $('pos').textContent = `X ${p.x.toFixed(2)} Y ${p.y.toFixed(2)}`;
   $('pen').textContent = `pen ${plotter.pen === 'unknown' ? '—' : plotter.pen}`;
   $('file-pause').textContent = isPaused(s.state) ? 'Resume' : 'Pause';
 });
@@ -105,7 +106,8 @@ plotter.on('job', (job) => {
 interface LoadedJob {
   name: string;
   info: string;
-  bounds: Bounds | null;
+  /** Extents in page coordinates (a function, so a changed Y-axis setting applies). */
+  bounds: () => Bounds | null;
   run: (options: JobOptions) => Promise<void>;
   running: boolean;
   /** Set once the job has been run (or attempted). */
@@ -121,7 +123,8 @@ const extent = (b: Bounds | null) => (b ? ` · X ${range(b.minX, b.maxX)} Y ${ra
 function renderFileBar(): void {
   $('file-bar').hidden = !loaded;
   if (!loaded) return;
-  const outside = plotter.outOfBounds(loaded.bounds);
+  const outside = plotter.outOfBounds(loaded.bounds());
+  $('file-info').textContent = `${loaded.info}${extent(loaded.bounds())}`;
   const result = $('file-result');
   if (!loaded.running && !loaded.ran) {
     result.textContent = outside ? `⚠ ${outside}` : 'Run with start and end G-code?';
@@ -142,7 +145,6 @@ function load(job: Omit<LoadedJob, 'running' | 'ran'>): void {
   if (plotter.job) throw new Error('Cannot load while a job is running');
   loaded = { ...job, running: false, ran: false };
   $('file-name').textContent = job.name;
-  $('file-info').textContent = job.info;
   renderFileBar();
 }
 
@@ -152,8 +154,8 @@ async function loadFile(f: File): Promise<void> {
   if (!lines) throw new Error(`${f.name} contains no G-code`);
   load({
     name: f.name,
-    info: `${lines} lines${extent(bounds)}`,
-    bounds,
+    info: `${lines} lines`,
+    bounds: () => plotter.pageBounds(bounds),
     run: (options) => plotter.run(text, options),
   });
 }
@@ -164,7 +166,7 @@ async function runLoaded(): Promise<void> {
   const started = Date.now();
   const result = $('file-result');
   // Pressing "Run anyway" is the confirmation to ignore the bed size.
-  const ignoreBounds = plotter.outOfBounds(current.bounds) !== null;
+  const ignoreBounds = plotter.outOfBounds(current.bounds()) !== null;
   result.className = '';
   current.running = true;
   stopRequested = false;
@@ -230,8 +232,8 @@ async function buildScript(): Promise<void> {
     const bounds = drawing.bounds();
     load({
       name: 'Script',
-      info: `${drawing.paths.length} paths, ${points} points${extent(bounds)}`,
-      bounds,
+      info: `${drawing.paths.length} paths, ${points} points`,
+      bounds: () => bounds,
       run: (options) => plotter.plot(drawing, options),
     });
   } catch (e) {
@@ -268,7 +270,9 @@ showTab(storage.get(TAB_KEY) === 'script' ? 'script' : 'console');
 // ---- settings -------------------------------------------------------------
 
 const settingsEl = $<HTMLDialogElement>('settings');
-const settingFields = settingsEl.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-key]');
+const settingFields = settingsEl.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+  '[data-key]',
+);
 
 function fillSettings(config: PlotterConfig): void {
   settingFields.forEach((el) => (el.value = String(config[el.dataset.key as keyof PlotterConfig])));
@@ -283,7 +287,7 @@ settingsEl.addEventListener('close', () => {
   if (settingsEl.returnValue !== 'save') return;
   const patch: Record<string, string | number> = {};
   settingFields.forEach((el) => {
-    patch[el.dataset.key!] = el instanceof HTMLTextAreaElement ? el.value : Number(el.value);
+    patch[el.dataset.key!] = el instanceof HTMLInputElement ? Number(el.value) : el.value;
   });
   plotter.setConfig(patch as Partial<PlotterConfig>);
   feedEl.value = String(plotter.config.drawFeed);
